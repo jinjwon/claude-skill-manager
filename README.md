@@ -25,6 +25,23 @@ cp -R claude-skill-manager/skills/* ~/.claude/skills/
 
 업데이트: `git pull` 후 위 `cp` 명령을 다시 실행.
 
+### 자동 동기화 (선택)
+`~/.claude/skills`에서 스킬을 고치면 이 레포에 자동으로 커밋·푸시되게 할 수 있다. `sync.sh`가 두 스킬을 레포로 복사하고, 바뀐 게 있을 때만 커밋하고 백그라운드로 푸시한다.
+
+`~/.claude/settings.json`의 `hooks`에 추가:
+```json
+"PostToolUse": [{
+  "matcher": "Edit|Write|MultiEdit|Bash",
+  "hooks": [{ "type": "command", "command": "grep -q -E '스킬추천|스킬제거' && bash ~/claude-skill-manager/sync.sh || true" }]
+}],
+"SessionStart": [{
+  "hooks": [{ "type": "command", "command": "bash ~/claude-skill-manager/sync.sh >/dev/null 2>&1 || true" }]
+}]
+```
+- PostToolUse: Claude가 두 스킬 파일을 고치면 바로 동기화.
+- SessionStart: 직접 편집기로 고친 것도 다음 세션 시작 때 올라감.
+- 푸시 실패 기록: `~/claude-skill-manager/.sync.log`. 수동 실행: `bash ~/claude-skill-manager/sync.sh`.
+
 ## 스킬추천
 
 ### 흐름
