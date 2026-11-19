@@ -9,7 +9,7 @@ done
 cd "$REPO" || exit 0
 git add -A skills
 git diff --cached --quiet && exit 0
-CHANGED=$(git diff --cached --name-only | sed 's#skills/##' | cut -d/ -f1 | sort -u | tr '\n' ' ')
+CHANGED=$(git -c core.quotePath=false diff --cached --name-only | sed 's#skills/##' | cut -d/ -f1 | sort -u | tr '\n' ' ')
 git commit -q -m "Auto-sync: ${CHANGED% }" || exit 0
 # 푸시는 백그라운드로: 훅이 Claude를 기다리게 하지 않는다. 실패하면 다음 동기화 때 같이 올라간다.
 ( git push -q origin main >> "$REPO/.sync.log" 2>&1 & )
