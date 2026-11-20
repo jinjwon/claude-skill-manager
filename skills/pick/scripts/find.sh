@@ -55,7 +55,7 @@ build_popular() {
     done
     gh search repos "skills in:name,description,topics" --created ">=$since" --stars ">=200" --sort stars --limit 30 \
       --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
-  } | awk -F'\t' -v f="$fresh" '$3>=f' | LC_ALL=C sort -u -t$'\t' -k1,1 | LC_ALL=C sort -t$'\t' -k2,2nr | head -50 > "$POPULAR.repos"
+  } | awk -F'\t' -v f="$fresh" '$3>=f && $1 !~ /^anthropics\//' | LC_ALL=C sort -u -t$'\t' -k1,1 | LC_ALL=C sort -t$'\t' -k2,2nr | head -50 > "$POPULAR.repos"
   : > "$POPULAR.tmp"
   while IFS=$'\t' read -r repo stars pushed desc; do
     created_recent=$(gh api "repos/$repo" --jq ".created_at[0:10] >= \"$since\"" 2>/dev/null)
@@ -63,7 +63,7 @@ build_popular() {
     printf '%s\t%s\t%s\t%s\n' "$tier" "$repo" "$stars" "$desc" >> "$POPULAR.tmp"
     gh api "repos/$repo/git/trees/HEAD?recursive=1" --jq '.tree[].path | select(. == "SKILL.md" or endswith("/SKILL.md"))' 2>/dev/null \
       | sed 's#/*SKILL.md$##' | head -80 | while read -r p; do
-        [ -z "$p" ] && p=.   # 레포 루트에 SKILL.md 가 있는 단일 스킬 레포
+        [ -z "$p" ] && continue   # 루트 SKILL.md 단일 스킬 레포: 위의 레포 줄이 이미 대표한다
         printf '%s\t%s/%s\t%s\t%s\n' "$tier" "$repo" "$p" "$stars" "$desc"
       done >> "$POPULAR.tmp"
   done < "$POPULAR.repos"
