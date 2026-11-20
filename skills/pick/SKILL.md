@@ -43,7 +43,7 @@ description: 어떤 스킬을 쓸지 모를 때, 이 작업에 맞는 스킬이 
    - 만들기 → "맞춤 스킬 만들기"로.
 8. 기록한다. `~/.claude/skill-archive/pick-history.tsv`에 한 줄 추가(폴더 없으면 만든다):
    `날짜<TAB>요청 요약<TAB>1순위 후보<TAB>사용자 선택`
-   사용자가 1순위가 아닌 것을 골랐으면 매핑 표의 해당 줄을 그 선택으로 고치고 `(학습 날짜, 1회)`를 붙인다(이미 같은 선택이면 횟수만 +1). 표에 없던 작업이면 줄을 추가한다.
+   사용자가 1순위가 아닌 것을 골랐으면 `mapping.md`의 해당 줄을 그 선택으로 고치고 `(학습 날짜, 1회)`를 붙인다(이미 같은 선택이면 횟수만 +1). 표에 없던 작업이면 줄을 추가한다.
 
 ### 묻지 않고 바로 진행하는 경우
 - 요청에 스킬 이름을 직접 적었다.
@@ -71,35 +71,15 @@ description: 어떤 스킬을 쓸지 모를 때, 이 작업에 맞는 스킬이 
 3. 내용은 이 프로젝트에서 확인한 사실만: 폴더 구조, 쓰는 도구·컴포넌트, 이름 규칙, 사용자가 이 대화에서 고친 점. 설치된 스킬이 이미 다루는 일반론은 다시 쓰지 말고 "X 스킬과 함께 쓴다"로 연결한다.
 4. 토큰을 아끼게 만든다: 매번 똑같이 하는 단계(파일 찾기, 변환, 검사)는 `scripts/`에 스크립트로 넣고 SKILL.md에는 실행 한 줄만 적는다. SKILL.md는 150줄 이하, 긴 참고 자료는 `references/`로 나눈다. 스크립트는 macOS·윈도우(Git Bash) 둘 다 도는 bash로.
 5. 만든 뒤 그 SKILL.md를 Read해서 바로 이번 요청에 적용한다(새 세션을 기다리지 않는다).
-6. 매핑 표에 `| <작업> (<프로젝트명>) | <새 스킬> |` 한 줄을 추가한다.
+6. `mapping.md`에 `| <작업> (<프로젝트명>) | <새 스킬> |` 한 줄을 추가한다.
 
 ## 매핑 (출발점일 뿐, 정답 아님)
 - 표의 스킬이 지금 세션 스킬 목록에 없으면(플러그인 꺼짐 등) 그 칸은 건너뛴다.
 - `(학습 날짜, N회)`가 붙은 줄은 사용자가 예전에 고른 것이다. 가설로만 쓴다. 다른 선택으로 또 바뀌면 덮어쓰고 횟수를 1로 되돌린다.
 
-| 작업 | 스킬 |
-|---|---|
-| 피그마 화면·와이어프레임·디자인 제작/수정 | figma:figma-use + figma:figma-generate-design |
-| 피그마 컴포넌트·토큰·디자인시스템 | figma:figma-use + figma:figma-generate-library |
-| FigJam·플로우차트·다이어그램 | figma:figma-use-figjam / figma:figma-generate-diagram |
-| 기획→화면 목록·IA·플로우 정리 | wireframe-plan |
-| 디자인 리뷰·피드백 | design-review |
-| 구현물 vs 시안 QA | design-qa |
-| 기획서·PRD·기능명세 | product-management:write-spec |
-| 아이디어 발산 | product-management:product-brainstorming |
-| 이미지 생성 프롬프트 작성(무엇이 부족한지 먼저 정하기) (학습 2026-11-20, 1회) | product-management:product-brainstorming |
-| 일정·스프린트 | product-management:sprint-planning |
-| 노션 문서 작성/수정 | (노션 MCP 직접) + docs 필요 시 anthropic-skills:docs |
-| PDF 읽기/편집 | anthropic-skills:pdf (보기·주석은 pdf-viewer:view-pdf) |
-| 엑셀/워드/PPT | anthropic-skills:xlsx / docx / pptx |
-| 이력서·포트폴리오 | resume-portfolio |
-| 코드 작성·수정 | ponytail (+ 버그면 superpowers:systematic-debugging) |
-| 코드 리뷰 | code-review |
-| 리서치 | anthropic-skills:deep-research |
-| 차트·대시보드 | dataviz |
-| 코드베이스/문서 지식그래프 | graphify |
-| 새 스킬 만들기 | anthropic-skills:skill-creator |
-| 안 쓰는 스킬 정리·제거·복구 | prune |
+표는 `~/.claude/skill-archive/mapping.md`에 있다(개인 파일, 업데이트해도 유지). 없으면 먼저 만든다:
+`[ -f ~/.claude/skill-archive/mapping.md ] || { mkdir -p ~/.claude/skill-archive && cp ~/.claude/skills/pick/mapping.default.md ~/.claude/skill-archive/mapping.md; }`
+그다음 `cat`으로 읽는다. 8번의 학습도 이 파일을 고친다.
 
 ## 새 스킬 설치 (외부 스킬)
 2번 로컬 결과에 쓸 만한 게 없고 사용자가 새 스킬을 원하면 더 넓게 찾는다.
