@@ -18,10 +18,11 @@ Claude Code에서 **어떤 스킬을 쓸지 고르고, 없으면 좋은 스킬�
 | macOS | `brew install gh jq` |
 | 윈도우 | `winget install GitHub.cli jqlang.jq` (Git Bash는 Claude Code 설치 때 함께 필요) |
 
-설치(macOS 터미널 / 윈도우 **Git Bash**에서 같은 명령):
+### 설치
+macOS 터미널 / 윈도우 **Git Bash**에서 같은 명령:
 ```bash
 git clone https://github.com/jinjwon/claude-skill-manager.git ~/claude-skill-manager
-mkdir -p ~/.claude/skills && cp -R ~/claude-skill-manager/skills/* ~/.claude/skills/
+bash ~/claude-skill-manager/install.sh
 ```
 윈도우에서 `~`는 `C:\Users\<이름>`이다. 스크립트는 모두 bash라서 Claude Code가 윈도우에서 쓰는 Git Bash로 그대로 돈다.
 
@@ -32,7 +33,20 @@ mkdir -p ~/.claude/skills && cp -R ~/claude-skill-manager/skills/* ~/.claude/ski
 /prune
 ```
 
-업데이트: `cd ~/claude-skill-manager && git pull` 후 위 `cp` 명령을 다시 실행.
+### 업데이트
+```bash
+bash ~/claude-skill-manager/install.sh
+```
+같은 명령이 최신 코드를 받고(`git pull`) 스킬을 다시 복사한다. 새 Claude Code 세션부터 적용된다.
+
+업데이트해도 **개인 데이터는 그대로** 남는다. 모두 `~/.claude/skill-archive/`에 있고 레포에는 올라가지 않는다.
+
+| 파일 | 내용 |
+|---|---|
+| `mapping.md` | 내 매핑 표. 처음 설치 때 `skills/pick/mapping.default.md`에서 만들어지고, 이후 `/pick`이 학습한 내용이 쌓인다 |
+| `pick-history.tsv` | 추천 기록(반복 업무·쏠림 판단에 씀) |
+| `removed.md` + 보관 폴더 | `/prune`으로 치운 스킬과 기록 |
+| `catalog.tsv`, `popular.tsv` | 공식·인기 스킬 목록 캐시(30일·7일마다 자동 갱신) |
 
 ## /pick
 
@@ -86,7 +100,7 @@ bash ~/.claude/skills/pick/scripts/find.sh --size <스킬이름...>     # 설치
 3. 토큰을 아끼게: 매번 같은 단계는 `scripts/`로 빼고 SKILL.md에는 실행 한 줄만. SKILL.md는 150줄 이하.
 
 ### 매핑 표 고치기
-`skills/pick/SKILL.md`의 `## 매핑` 표에 `| 작업 | 스킬 |` 줄을 추가·수정한다. 표는 출발점일 뿐이고, 목록에 더 맞는 스킬이 있으면 그쪽을 고른다.
+`~/.claude/skill-archive/mapping.md`에 `| 작업 | 스킬 |` 줄을 추가·수정한다. 표는 출발점일 뿐이고, 목록에 더 맞는 스킬이 있으면 그쪽을 고른다. 모두에게 기본으로 줄 줄은 레포의 `skills/pick/mapping.default.md`에 넣는다.
 
 ## /prune
 
@@ -138,6 +152,8 @@ skills/
   prune/
     SKILL.md
     scripts/usage.sh     # 호출 수 집계
-sync.sh                  # 자동 동기화(선택)
+    mapping.default.md   # 기본 매핑 표(처음 설치 때 개인 표로 복사)
+install.sh               # 설치·업데이트
+sync.sh                  # 자동 동기화(선택, 레포 관리자용)
 ```
-런타임 데이터(`~/.claude/skill-archive/`: 카탈로그 캐시, 제거 기록, 보관 스킬)는 레포에 넣지 않는다.
+개인 데이터(`~/.claude/skill-archive/`)는 레포에 넣지 않는다.
