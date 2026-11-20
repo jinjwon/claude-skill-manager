@@ -4,6 +4,7 @@
 #       bash find.sh --top [개수]     # 지금 인기·트렌드 스킬 레포 목록
 #   --all      로컬 카탈로그에서 찾아도 깃헙 실시간 검색까지
 #   --refresh  카탈로그 두 개를 강제로 새로 받음
+#   --desc <owner/repo/경로>  그 스킬의 SKILL.md 설명 한 줄 (인기 카탈로그는 레포 설명만 갖고 있어서)
 #   --local    네트워크 0: 캐시가 오래돼도 갱신 안 함, 실시간 검색 안 함 (/pick 이 매번 가볍게 훑을 때)
 # 순서: 제거 기록 -> 공식 카탈로그(30일 캐시) -> 인기·트렌드 카탈로그(7일 캐시) -> 깃헙 실시간(필요할 때만)
 # macOS 와 윈도우(Git Bash) 모두에서 돈다. 필요: gh(로그인), jq.
@@ -13,6 +14,12 @@ CATALOG="$ARCHIVE/catalog.tsv"   # tier \t 위치 \t 설명            (공식·
 POPULAR="$ARCHIVE/popular.tsv"   # tier \t 위치 \t 스타 \t 설명     (인기·트렌드)
 REMOVED="$ARCHIVE/removed.md"
 ALL=0; REFRESH=0; TOP=0; LOCAL=0; KW=()
+if [ "$1" = "--desc" ]; then
+  repo=$(echo "$2" | cut -d/ -f1-2); path=$(echo "$2" | cut -d/ -f3-)
+  gh api "repos/$repo/contents/${path:+$path/}SKILL.md" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+    | awk '/^description:/{sub(/^description: */,""); if($0 ~ /^[>|][-+]?$/){getline; sub(/^ +/,"")} print; exit}' | cut -c1-300
+  exit 0
+fi
 for a in "$@"; do
   case "$a" in
     --all) ALL=1 ;;
