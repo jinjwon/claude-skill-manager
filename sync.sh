@@ -4,7 +4,8 @@
 REPO="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HOME/.claude/skills"
 for s in 스킬추천 스킬제거; do
-  [ -d "$SRC/$s" ] && rsync -a --delete --exclude '.DS_Store' "$SRC/$s/" "$REPO/skills/$s/"
+  # rsync 는 윈도우 Git Bash 에 없어서 지우고 복사한다.
+  [ -d "$SRC/$s" ] && rm -rf "$REPO/skills/$s" && cp -R "$SRC/$s" "$REPO/skills/$s"
 done
 cd "$REPO" || exit 0
 git add -A skills

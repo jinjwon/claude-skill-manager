@@ -9,12 +9,19 @@ Claude Code에서 **어떤 스킬을 쓸지 고르고, 없으면 찾아 설치�
 
 ## 빠른 시작
 
-필요한 것: macOS, [Claude Code](https://claude.com/claude-code), `gh`(GitHub CLI, 로그인된 상태), `jq`.
+필요한 것: [Claude Code](https://claude.com/claude-code), `gh`(GitHub CLI, `gh auth login` 완료), `jq`. macOS와 윈도우 모두 지원.
 
+| | 도구 설치 |
+|---|---|
+| macOS | `brew install gh jq` |
+| 윈도우 | `winget install GitHub.cli jqlang.jq` (Git Bash는 Claude Code 설치 때 함께 필요) |
+
+설치(macOS 터미널 / 윈도우 **Git Bash**에서 같은 명령):
 ```bash
-git clone https://github.com/jinjwon/claude-skill-manager.git
-cp -R claude-skill-manager/skills/* ~/.claude/skills/
+git clone https://github.com/jinjwon/claude-skill-manager.git ~/claude-skill-manager
+mkdir -p ~/.claude/skills && cp -R ~/claude-skill-manager/skills/* ~/.claude/skills/
 ```
+윈도우에서 `~`는 `C:\Users\<이름>`이다. 스크립트는 모두 bash라서 Claude Code가 윈도우에서 쓰는 Git Bash로 그대로 돈다.
 
 새 Claude Code 세션을 열면 바로 쓸 수 있다.
 
@@ -32,7 +39,7 @@ cp -R claude-skill-manager/skills/* ~/.claude/skills/
 ```json
 "PostToolUse": [{
   "matcher": "Edit|Write|MultiEdit|Bash",
-  "hooks": [{ "type": "command", "command": "grep -q -E '스킬추천|스킬제거' && bash ~/claude-skill-manager/sync.sh || true" }]
+  "hooks": [{ "type": "command", "command": "grep -q -E 'skills|스킬' && bash ~/claude-skill-manager/sync.sh || true" }]
 }],
 "SessionStart": [{
   "hooks": [{ "type": "command", "command": "bash ~/claude-skill-manager/sync.sh >/dev/null 2>&1 || true" }]
@@ -50,6 +57,9 @@ cp -R claude-skill-manager/skills/* ~/.claude/skills/
 3. 한 번 확인한다. 질문 창에 `이름 — 무슨 스킬 — 왜 쓰는지`가 한 줄씩 뜬다.
    - 추천대로 진행 / 대안으로 변경 / 추천 + 추가 / 맞춤 스킬 제작(조건 맞을 때만) / 직접 입력
 4. 고른 스킬로 실행. 작업 중에는 다시 묻지 않는다.
+5. 대안·추가·직접 입력을 골랐으면 매핑 표를 그 선택으로 고친다. 쓸수록 첫 추천이 맞아진다.
+
+이럴 때도 불린다: "이거 하는 스킬 있어?", "스킬 찾아줘", 있는 스킬로 두 번 해도 막혔을 때(외부 탐색을 한 줄로 제안).
 
 요청에 스킬 이름을 직접 적었거나, 같은 대화에서 같은 종류 작업을 이미 확인했다면 질문을 건너뛴다.
 
@@ -72,7 +82,9 @@ bash ~/.claude/skills/스킬추천/scripts/find.sh --refresh <키워드> # 공�
 
 - 이름에 키워드가 맞는 공식 후보가 있으면 3번은 건너뛴다. 설명만 겹치는 약한 후보면 3번까지 본다.
 - 이미 설치된 스킬은 `[설치됨]`으로 표시해 중복 설치를 막는다.
+- 신뢰 순서: 공식 > Anthropic 레포 > 그 제품을 만든 회사 레포(vercel-labs, microsoft 등) > 개인. 스타 100 미만, 6개월 넘게 커밋 없는 레포는 의심한다.
 - 제3자 스킬은 추천 전에 SKILL.md와 스크립트를 끝까지 읽고, 외부 전송·자격증명 접근·파괴적 명령이 있으면 뺀다.
+- 설치 질문에는 무슨 스킬인지, 출처, 스타 수, 크기, 설치될 위치가 함께 뜬다.
 
 설치는 **반드시 묻는다**. 거부하면 다른 후보로 한 번 더 묻고(2차), 또 거부하면 설치 없이 있는 스킬로 진행한다.
 
@@ -103,7 +115,7 @@ bash ~/.claude/skills/스킬제거/scripts/usage.sh   # 스킬별 호출 수 확
 ## 한계
 - 호출 수는 Claude Code가 남긴 대화 기록 범위(보통 약 30일)만 센다.
 - 홈 폴더처럼 특정 프로젝트가 아닌 곳에서는 "프로젝트에 안 맞음"을 판단하기 어려워 후보가 거의 안 나온다. 프로젝트 폴더에서 돌릴 것.
-- 스크립트는 macOS(BSD `stat`) 기준.
+- 윈도우 경로(GNU `stat`, `pwd -W`)는 코드로 대응했지만 실제 윈도우 PC에서는 아직 돌려 보지 않았다. 문제가 있으면 이슈로 남길 것.
 
 ## 파일 구조
 ```
