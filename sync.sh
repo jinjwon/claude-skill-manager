@@ -1,9 +1,9 @@
 #!/bin/bash
-# ~/.claude/skills 의 스킬추천·스킬제거를 이 레포로 복사하고, 바뀐 게 있으면 커밋·푸시한다.
+# ~/.claude/skills 의 pick·prune를 이 레포로 복사하고, 바뀐 게 있으면 커밋·푸시한다.
 # Claude Code 훅에서 자동 실행된다. 직접 실행해도 된다: bash ~/claude-skill-manager/sync.sh
 REPO="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HOME/.claude/skills"
-for s in 스킬추천 스킬제거; do
+for s in pick prune; do
   # rsync 는 윈도우 Git Bash 에 없어서 지우고 복사한다.
   [ -d "$SRC/$s" ] && rm -rf "$REPO/skills/$s" && cp -R "$SRC/$s" "$REPO/skills/$s"
 done
