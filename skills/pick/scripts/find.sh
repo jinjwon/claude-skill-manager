@@ -51,10 +51,11 @@ build_popular() {
   Q='.[]|[.fullName, .stargazersCount, .pushedAt[0:10], ((.description // "")[0:140] | gsub("[\t\n\r]";" "))]|@tsv'
   { for t in claude-skills agent-skills claude-code-skills claude-code-plugin; do
       gh search repos --topic "$t" --stars ">=300" --sort stars --limit 30 --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
+      gh search repos --topic "$t" --created ">=$since" --stars ">=100" --sort stars --limit 10 --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
     done
     gh search repos "skills in:name,description,topics" --created ">=$since" --stars ">=200" --sort stars --limit 30 \
       --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
-  } | awk -F'\t' -v f="$fresh" '$3>=f' | sort -u -t$'\t' -k1,1 | sort -t$'\t' -k2,2nr | head -40 > "$POPULAR.repos"
+  } | awk -F'\t' -v f="$fresh" '$3>=f' | LC_ALL=C sort -u -t$'\t' -k1,1 | LC_ALL=C sort -t$'\t' -k2,2nr | head -50 > "$POPULAR.repos"
   : > "$POPULAR.tmp"
   while IFS=$'\t' read -r repo stars pushed desc; do
     created_recent=$(gh api "repos/$repo" --jq ".created_at[0:10] >= \"$since\"" 2>/dev/null)
@@ -76,7 +77,7 @@ if [ $TOP -gt 0 ]; then
   echo "== 인기·트렌드 스킬 레포 상위 $TOP (tier, 레포, 스타, 스킬 수, 설명) =="
   awk -F'\t' '{split($2,a,"/"); r=a[1]"/"a[2]; if($2==r){row[r]=$0} else cnt[r]++}
     END{for(r in row){split(row[r],f,"\t"); print f[1]"\t"f[2]"\t"f[3]"\t"(cnt[r]+0)"\t"substr(f[4],1,90)}}' "$POPULAR" \
-    | sort -t$'\t' -k3,3nr | head -"$TOP"
+    | LC_ALL=C sort -t$'\t' -k3,3nr | head -"$TOP"
   exit 0
 fi
 
@@ -92,7 +93,7 @@ if [ -f "$REMOVED" ]; then
 fi
 
 # 설치된 스킬 이름(개인 + 동기화 + 플러그인). 겹치면 [설치됨] 표시해 중복 설치를 막는다.
-INSTALLED=$( { ls "$HOME/.claude/skills" 2>/dev/null; ls "$HOME"/.claude/skills/synced/*/ 2>/dev/null; find "$HOME/.claude/plugins/cache" -name SKILL.md 2>/dev/null | awk -F/ '{print $(NF-1)}'; } | sort -u)
+INSTALLED=$( { ls "$HOME/.claude/skills" 2>/dev/null; ls "$HOME"/.claude/skills/synced/*/ 2>/dev/null; find "$HOME/.claude/plugins/cache" -name SKILL.md 2>/dev/null | awk -F/ '{print $(NF-1)}'; } | LC_ALL=C sort -u)
 mark() { while IFS= read -r line; do
   n=$(echo "$line" | cut -f3 | sed -E 's#.*(plugin:|/)##')
   if echo "$INSTALLED" | grep -qx "$n"; then echo "[설치됨] $line"; else echo "$line"; fi
@@ -107,7 +108,7 @@ KWS="$(IFS=' '; echo "${KW[*]}")"
       {l=tolower($0); m=split(tolower($2),pp,"/"); nm=pp[m]; s=0
        for(i=1;i<=n;i++){ if(index(nm,k[i])) s+=3; else if(index(l,k[i])) s++ }
        if(s>0) print s"\t"$0}' \
-  | sort -t$'\t' -k1,1nr -k2,2 -k4,4nr | head -8 > "$ARCHIVE/.hits"
+  | LC_ALL=C sort -t$'\t' -k1,1nr -k2,2 -k4,4nr | head -8 > "$ARCHIVE/.hits"
 if [ -s "$ARCHIVE/.hits" ]; then
   echo "== 로컬 카탈로그 후보 (점수, tier, 위치, 스타, 설명) =="
   cut -c1-230 "$ARCHIVE/.hits" | mark
@@ -123,4 +124,4 @@ echo "== 깃헙 실시간 후보 (레포, 스타, 최근 push, 라이선스, 설
 J='.[]|[.fullName, .stargazersCount, .pushedAt[0:10], (.license.key // "none"), ((.description // "")[0:100])]|@tsv'
 { gh search repos "${KW[0]}" --topic claude-skills --stars ">=20" --sort stars --limit 5 --json fullName,stargazersCount,pushedAt,license,description --jq "$J" 2>/dev/null
   gh search repos "${KW[0]} skill" --stars ">=50" --sort stars --limit 5 --json fullName,stargazersCount,pushedAt,license,description --jq "$J" 2>/dev/null
-} | sort -u -t$'\t' -k1,1 | sort -t$'\t' -k2,2nr | head -5
+} | LC_ALL=C sort -u -t$'\t' -k1,1 | LC_ALL=C sort -t$'\t' -k2,2nr | head -5
