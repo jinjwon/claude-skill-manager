@@ -4,7 +4,7 @@
 #       bash find.sh --top [개수]     # 지금 인기·트렌드 스킬 레포 목록
 #   --all      로컬 카탈로그에서 찾아도 깃헙 실시간 검색까지
 #   --refresh  카탈로그 두 개를 강제로 새로 받음
-#   --size <스킬이름...>     설치된 스킬을 불러올 때 드는 토큰 대략치(SKILL.md 기준)
+#   --size <스킬이름...>     설치된 스킬의 토큰 대략치(SKILL.md 기준) + 설명 한 줄
 #   --desc <owner/repo/경로>  그 스킬의 SKILL.md 설명 한 줄 (인기 카탈로그는 레포 설명만 갖고 있어서)
 #   --local    네트워크 0: 캐시가 오래돼도 갱신 안 함, 실시간 검색 안 함 (/pick 이 매번 가볍게 훑을 때)
 # 순서: 제거 기록 -> 공식 카탈로그(30일 캐시) -> 인기·트렌드 카탈로그(7일 캐시) -> 깃헙 실시간(필요할 때만)
@@ -22,7 +22,10 @@ if [ "$1" = "--size" ]; then
     f=$( { ls "$HOME/.claude/skills/$b/SKILL.md" "$HOME"/.claude/skills/synced/*/"$b"/SKILL.md 2>/dev/null
            find "$HOME/.claude/plugins" -path "*/skills/$b/SKILL.md" 2>/dev/null; } | head -1)
     # shortcut: 바이트/3 으로 어림(한글·영어 섞인 문서 기준). 정확한 값이 필요하면 토크나이저로.
-    if [ -n "$f" ]; then echo "$n	약 $(( $(wc -c < "$f") / 3 ))토큰"; else echo "$n	찾지 못함"; fi
+    if [ -n "$f" ]; then
+      d=$(awk '/^description:/{sub(/^description: */,""); if($0 ~ /^[>|][-+]?$/){getline; sub(/^ +/,"")} print; exit}' "$f" | cut -c1-160)
+      echo "$n	약 $(( $(wc -c < "$f") / 3 ))토큰	$d"
+    else echo "$n	찾지 못함"; fi
   done
   exit 0
 fi
