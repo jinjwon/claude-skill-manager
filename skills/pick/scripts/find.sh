@@ -110,7 +110,7 @@ KWS="$(IFS=' '; echo "${KW[*]}")"
 { [ -s "$CATALOG" ] && awk -F'\t' '{print $1"\t"$2"\t-\t"$3}' "$CATALOG"; [ -s "$POPULAR" ] && cat "$POPULAR"; } \
   | awk -F'\t' -v kw="$KWS" 'BEGIN{n=split(tolower(kw),k," ")}
       {l=tolower($0); m=split(tolower($2),pp,"/"); nm=pp[m]; s=0
-       for(i=1;i<=n;i++){ if(index(nm,k[i])) s+=3; else if(index(l,k[i])) s++ }
+       for(i=1;i<=n;i++){ re="(^|[^a-z0-9])" k[i]; if(nm ~ re) s+=3; else if(l ~ re) s++ }  # 단어 첫머리만 인정: "ui"가 "build"에 안 걸리게
        if(s>0) print s"\t"$0}' \
   | LC_ALL=C sort -t$'\t' -k1,1nr -k2,2 -k4,4nr | head -8 > "$ARCHIVE/.hits"
 if [ -s "$ARCHIVE/.hits" ]; then
