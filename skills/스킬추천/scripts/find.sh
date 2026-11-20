@@ -44,7 +44,7 @@ build_catalog() {
     tier=${spec%%:*}; repo=${spec##*:}
     gh api "repos/anthropics/$repo/contents/.claude-plugin/marketplace.json" -H "Accept: application/vnd.github.raw" 2>/dev/null \
       | jq -r --arg t "$tier" --arg r "$repo" '.plugins[]? | [$t, "anthropics/\($r) plugin:\(.name)", ((.description // "")[0:180] | gsub("[\t\n]";" "))] | @tsv' \
-      >> "$CATALOG.tmp" 2>/dev/null
+      2>/dev/null | tr -d '\r' >> "$CATALOG.tmp"
   done
   if [ -s "$CATALOG.tmp" ]; then mv "$CATALOG.tmp" "$CATALOG"; else rm -f "$CATALOG.tmp"; echo "카탈로그 받기 실패 (gh 로그인/네트워크 확인)"; fi
 }
