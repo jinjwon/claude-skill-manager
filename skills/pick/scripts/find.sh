@@ -1,26 +1,87 @@
 #!/bin/bash
 # 외부 스킬 후보를 한 번의 호출로 찾는다. 출력은 짧게 잘라 토큰을 아낀다.
 # 사용: bash find.sh [--all] [--refresh] <영어 키워드> [키워드2 ...]
-#   --all      공식에서 찾아도 제3자 깃헙까지 검색
-#   --refresh  공식 카탈로그 캐시를 강제로 새로 받음
-# 순서: 제거 기록 -> 공식 카탈로그(로컬 캐시) -> 제3자 깃헙(실시간, 필요할 때만)
+#       bash find.sh --top [개수]     # 지금 인기·트렌드 스킬 레포 목록
+#   --all      로컬 카탈로그에서 찾아도 깃헙 실시간 검색까지
+#   --refresh  카탈로그 두 개를 강제로 새로 받음
+# 순서: 제거 기록 -> 공식 카탈로그(30일 캐시) -> 인기·트렌드 카탈로그(7일 캐시) -> 깃헙 실시간(필요할 때만)
+# macOS 와 윈도우(Git Bash) 모두에서 돈다. 필요: gh(로그인), jq.
 
 ARCHIVE="$HOME/.claude/skill-archive"
-CATALOG="$ARCHIVE/catalog.tsv"
+CATALOG="$ARCHIVE/catalog.tsv"   # tier \t 위치 \t 설명            (공식·Anthropic)
+POPULAR="$ARCHIVE/popular.tsv"   # tier \t 위치 \t 스타 \t 설명     (인기·트렌드)
 REMOVED="$ARCHIVE/removed.md"
-ALL=0; REFRESH=0; KW=()
+ALL=0; REFRESH=0; TOP=0; KW=()
 for a in "$@"; do
   case "$a" in
     --all) ALL=1 ;;
     --refresh) REFRESH=1 ;;
-    *) KW+=("$a") ;;
+    --top) TOP=15 ;;
+    *) if [ $TOP -gt 0 ] && [[ "$a" =~ ^[0-9]+$ ]]; then TOP=$a; else KW+=("$a"); fi ;;
   esac
 done
-[ ${#KW[@]} -eq 0 ] && { echo "키워드 필요"; exit 1; }
-PATTERN=$(IFS='|'; echo "${KW[*]}")
+[ $TOP -eq 0 ] && [ ${#KW[@]} -eq 0 ] && { echo "키워드 필요 (또는 --top)"; exit 1; }
 mkdir -p "$ARCHIVE"
+stale() { [ $REFRESH -eq 1 ] || [ ! -s "$1" ] || [ -n "$(find "$1" -mtime +"$2" 2>/dev/null)" ]; }
+# N일 전 날짜: macOS(BSD date) 와 Git Bash(GNU date) 옵션이 다르다.
+days_ago() { date -v-"$1"d +%F 2>/dev/null || date -d "$1 days ago" +%F; }
+desc_of() { awk '/^description:/{sub(/^description: */,""); if($0 ~ /^[>|][-+]?$/){getline; sub(/^ +/,"")} print; exit}' | cut -c1-180 | tr '\t\r' '  '; }
 
-# 0. 예전에 제거한 스킬이면 바로 복구할 수 있다.
+# ---------- 카탈로그 만들기 ----------
+build_official() {
+  : > "$CATALOG.tmp"
+  for n in $(gh api repos/anthropics/skills/contents/skills --jq '.[]|select(.type=="dir")|.name' 2>/dev/null); do
+    d=$(gh api "repos/anthropics/skills/contents/skills/$n/SKILL.md" -H "Accept: application/vnd.github.raw" 2>/dev/null | desc_of)
+    printf '1-official\tanthropics/skills/skills/%s\t%s\n' "$n" "$d" >> "$CATALOG.tmp"
+  done
+  for spec in "1-official:claude-plugins-official" "2-anthropic:knowledge-work-plugins" "2-anthropic:claude-code" "2-anthropic:financial-services"; do
+    tier=${spec%%:*}; repo=${spec##*:}
+    gh api "repos/anthropics/$repo/contents/.claude-plugin/marketplace.json" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+      | jq -r --arg t "$tier" --arg r "$repo" '.plugins[]? | [$t, "anthropics/\($r) plugin:\(.name)", ((.description // "")[0:180] | gsub("[\t\n]";" "))] | @tsv' \
+      2>/dev/null | tr -d '\r' >> "$CATALOG.tmp"
+  done
+  if [ -s "$CATALOG.tmp" ]; then mv "$CATALOG.tmp" "$CATALOG"; else rm -f "$CATALOG.tmp"; echo "공식 카탈로그 받기 실패 (gh 로그인/네트워크 확인)"; fi
+}
+
+# 인기(스킬 토픽 스타 상위) + 트렌드(최근 90일 새로 생겨 스타가 빨리 붙은 레포).
+# 레포마다 트리 1번만 받아 SKILL.md 가 든 폴더 이름을 스킬 이름으로 쓴다. 설명은 레포 설명.
+build_popular() {
+  echo "(인기·트렌드 카탈로그 갱신 중: 1분 안팎)" >&2
+  since=$(days_ago 90); fresh=$(days_ago 180)
+  Q='.[]|[.fullName, .stargazersCount, .pushedAt[0:10], ((.description // "")[0:140] | gsub("[\t\n\r]";" "))]|@tsv'
+  { for t in claude-skills agent-skills claude-code-skills claude-code-plugin; do
+      gh search repos --topic "$t" --stars ">=300" --sort stars --limit 30 --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
+    done
+    gh search repos "skills in:name,description,topics" --created ">=$since" --stars ">=200" --sort stars --limit 30 \
+      --json fullName,stargazersCount,pushedAt,description --jq "$Q" 2>/dev/null
+  } | awk -F'\t' -v f="$fresh" '$3>=f' | sort -u -t$'\t' -k1,1 | sort -t$'\t' -k2,2nr | head -40 > "$POPULAR.repos"
+  : > "$POPULAR.tmp"
+  while IFS=$'\t' read -r repo stars pushed desc; do
+    created_recent=$(gh api "repos/$repo" --jq ".created_at[0:10] >= \"$since\"" 2>/dev/null)
+    tier=3-popular; [ "$created_recent" = "true" ] && tier=3-trending
+    printf '%s\t%s\t%s\t%s\n' "$tier" "$repo" "$stars" "$desc" >> "$POPULAR.tmp"
+    gh api "repos/$repo/git/trees/HEAD?recursive=1" --jq '.tree[].path | select(endswith("/SKILL.md"))' 2>/dev/null \
+      | sed 's#/SKILL.md$##' | head -80 | while read -r p; do
+        printf '%s\t%s/%s\t%s\t%s\n' "$tier" "$repo" "$p" "$stars" "$desc"
+      done >> "$POPULAR.tmp"
+  done < "$POPULAR.repos"
+  rm -f "$POPULAR.repos"
+  if [ -s "$POPULAR.tmp" ]; then tr -d '\r' < "$POPULAR.tmp" > "$POPULAR"; fi; rm -f "$POPULAR.tmp"
+}
+stale "$CATALOG" 30 && build_official
+stale "$POPULAR" 7 && build_popular
+
+# ---------- --top: 지금 좋은 스킬 레포 목록 ----------
+if [ $TOP -gt 0 ]; then
+  echo "== 인기·트렌드 스킬 레포 상위 $TOP (tier, 레포, 스타, 스킬 수, 설명) =="
+  awk -F'\t' '{split($2,a,"/"); r=a[1]"/"a[2]; if($2==r){row[r]=$0} else cnt[r]++}
+    END{for(r in row){split(row[r],f,"\t"); print f[1]"\t"f[2]"\t"f[3]"\t"(cnt[r]+0)"\t"substr(f[4],1,90)}}' "$POPULAR" \
+    | sort -t$'\t' -k3,3nr | head -"$TOP"
+  exit 0
+fi
+
+PATTERN=$(IFS='|'; echo "${KW[*]}")
+# ---------- 0. 제거 기록 ----------
 if [ -f "$REMOVED" ]; then
   HIT=$(grep -i -E "$PATTERN" "$REMOVED" | head -5)
   if [ -n "$HIT" ]; then
@@ -30,60 +91,36 @@ if [ -f "$REMOVED" ]; then
   fi
 fi
 
-# 1. 공식 카탈로그: 30일에 한 번만 받아 로컬에 둔다.
-build_catalog() {
-  : > "$CATALOG.tmp"
-  # anthropics/skills: 스킬별 SKILL.md의 description 한 줄
-  for n in $(gh api repos/anthropics/skills/contents/skills --jq '.[]|select(.type=="dir")|.name' 2>/dev/null); do
-    d=$(gh api "repos/anthropics/skills/contents/skills/$n/SKILL.md" -H "Accept: application/vnd.github.raw" 2>/dev/null \
-        | awk '/^description:/{sub(/^description: */,""); if($0 ~ /^[>|][-+]?$/){getline; sub(/^ +/,"")} print; exit}' | cut -c1-180 | tr '\t' ' ')
-    printf '1-official\tanthropics/skills/skills/%s\t%s\n' "$n" "$d" >> "$CATALOG.tmp"
-  done
-  # 공식 마켓플레이스와 Anthropic 스타 상위 레포의 플러그인 목록
-  for spec in "1-official:claude-plugins-official" "2-anthropic:knowledge-work-plugins" "2-anthropic:claude-code" "2-anthropic:financial-services"; do
-    tier=${spec%%:*}; repo=${spec##*:}
-    gh api "repos/anthropics/$repo/contents/.claude-plugin/marketplace.json" -H "Accept: application/vnd.github.raw" 2>/dev/null \
-      | jq -r --arg t "$tier" --arg r "$repo" '.plugins[]? | [$t, "anthropics/\($r) plugin:\(.name)", ((.description // "")[0:180] | gsub("[\t\n]";" "))] | @tsv' \
-      2>/dev/null | tr -d '\r' >> "$CATALOG.tmp"
-  done
-  if [ -s "$CATALOG.tmp" ]; then mv "$CATALOG.tmp" "$CATALOG"; else rm -f "$CATALOG.tmp"; echo "카탈로그 받기 실패 (gh 로그인/네트워크 확인)"; fi
-}
-if [ $REFRESH -eq 1 ] || [ ! -s "$CATALOG" ] || [ -n "$(find "$CATALOG" -mtime +30 2>/dev/null)" ]; then
-  build_catalog
-fi
-
-# 설치된 스킬 이름(개인 + 플러그인). 겹치면 [설치됨] 표시해 중복 설치를 막는다.
+# 설치된 스킬 이름(개인 + 동기화 + 플러그인). 겹치면 [설치됨] 표시해 중복 설치를 막는다.
 INSTALLED=$( { ls "$HOME/.claude/skills" 2>/dev/null; ls "$HOME"/.claude/skills/synced/*/ 2>/dev/null; find "$HOME/.claude/plugins/cache" -name SKILL.md 2>/dev/null | awk -F/ '{print $(NF-1)}'; } | sort -u)
 mark() { while IFS= read -r line; do
-  n=$(echo "$line" | cut -f2 | sed -E 's/.*(plugin:|skills\/)//')
+  n=$(echo "$line" | cut -f3 | sed -E 's#.*(plugin:|/)##')
   if echo "$INSTALLED" | grep -qx "$n"; then echo "[설치됨] $line"; else echo "$line"; fi
 done; }
-# 키워드가 많이 맞는 줄을 위로. 키워드 하나라도 맞아야 후보.
-OFFICIAL=""
-if [ -s "$CATALOG" ]; then
-  awk -F'\t' -v kw="$(IFS=' '; echo "${KW[*]}")" 'BEGIN{n=split(tolower(kw),k," ")}
-    {l=tolower($0); nm=tolower($2); s=0; for(i=1;i<=n;i++){ if(index(nm,k[i])) s+=3; else if(index(l,k[i])) s++ } if(s>0) print s"\t"$0}' "$CATALOG" \
-    | sort -t$'\t' -k1,1nr -k2,2 | head -6 > "$ARCHIVE/.hits"
-  OFFICIAL=$(cut -f2- "$ARCHIVE/.hits" | mark)
-  # 이름에 키워드가 들어간 후보(점수 3 이상)가 있을 때만 "공식에서 찾음"으로 본다.
+
+# ---------- 1. 로컬 카탈로그 두 개를 함께 점수 매김 ----------
+# 점수: 이름에 키워드 +3, 설명에만 +1. 같은 점수면 tier(공식 우선) -> 스타 순.
+# 출력 열: 점수 \t tier \t 위치 \t 스타 \t 설명
+KWS="$(IFS=' '; echo "${KW[*]}")"
+{ [ -s "$CATALOG" ] && awk -F'\t' '{print $1"\t"$2"\t-\t"$3}' "$CATALOG"; [ -s "$POPULAR" ] && cat "$POPULAR"; } \
+  | awk -F'\t' -v kw="$KWS" 'BEGIN{n=split(tolower(kw),k," ")}
+      {l=tolower($0); m=split(tolower($2),pp,"/"); nm=pp[m]; s=0
+       for(i=1;i<=n;i++){ if(index(nm,k[i])) s+=3; else if(index(l,k[i])) s++ }
+       if(s>0) print s"\t"$0}' \
+  | sort -t$'\t' -k1,1nr -k2,2 -k4,4nr | head -8 > "$ARCHIVE/.hits"
+if [ -s "$ARCHIVE/.hits" ]; then
+  echo "== 로컬 카탈로그 후보 (점수, tier, 위치, 스타, 설명) =="
+  cut -c1-230 "$ARCHIVE/.hits" | mark
   STRONG=$(awk -F'\t' '$1>=3' "$ARCHIVE/.hits" | head -1)
-fi
-if [ -n "$OFFICIAL" ]; then
-  echo "== 공식/Anthropic 후보 (tier, 위치, 설명) =="
-  echo "$OFFICIAL"
-  if [ -n "$STRONG" ] && [ $ALL -eq 0 ]; then echo "(이름이 맞는 공식 후보 있음: 제3자 검색 생략. 더 보려면 --all)"; exit 0; fi
-  echo "(설명만 겹치는 약한 후보: 제3자도 함께 확인)"
+  if [ -n "$STRONG" ] && [ $ALL -eq 0 ]; then echo "(이름이 맞는 후보 있음: 실시간 검색 생략. 더 보려면 --all)"; exit 0; fi
+  echo "(설명만 겹치는 약한 후보: 실시간 검색도 함께)"
 else
-  echo "== 공식/Anthropic 후보 없음 =="
+  echo "== 로컬 카탈로그 후보 없음 =="
 fi
 
-# 2. 제3자 깃헙: 공식에 없을 때만. 스타 50 이상, 5개, 설명 100자.
-echo "== 제3자 깃헙 후보 (레포, 스타, 최근 push, 라이선스, 설명) =="
-Q="${KW[*]}"
-{ gh search repos "${KW[0]}" --topic claude-skills --stars ">=20" --sort stars --limit 5 \
-    --json fullName,stargazersCount,pushedAt,license,description \
-    --jq '.[]|[.fullName, .stargazersCount, .pushedAt[0:10], (.license.key // "none"), ((.description // "")[0:100])]|@tsv' 2>/dev/null
-  gh search repos "${KW[0]} skill" --stars ">=50" --sort stars --limit 5 \
-    --json fullName,stargazersCount,pushedAt,license,description \
-    --jq '.[]|[.fullName, .stargazersCount, .pushedAt[0:10], (.license.key // "none"), ((.description // "")[0:100])]|@tsv' 2>/dev/null
+# ---------- 2. 깃헙 실시간 ----------
+echo "== 깃헙 실시간 후보 (레포, 스타, 최근 push, 라이선스, 설명) =="
+J='.[]|[.fullName, .stargazersCount, .pushedAt[0:10], (.license.key // "none"), ((.description // "")[0:100])]|@tsv'
+{ gh search repos "${KW[0]}" --topic claude-skills --stars ">=20" --sort stars --limit 5 --json fullName,stargazersCount,pushedAt,license,description --jq "$J" 2>/dev/null
+  gh search repos "${KW[0]} skill" --stars ">=50" --sort stars --limit 5 --json fullName,stargazersCount,pushedAt,license,description --jq "$J" 2>/dev/null
 } | sort -u -t$'\t' -k1,1 | sort -t$'\t' -k2,2nr | head -5
