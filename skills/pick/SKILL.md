@@ -52,6 +52,7 @@ description: 요청에 맞는 스킬 후보를 골라 핵심만 보여 주고, �
 | 구현물 vs 시안 QA | design-qa |
 | 기획서·PRD·기능명세 | product-management:write-spec |
 | 아이디어 발산 | product-management:product-brainstorming |
+| 이미지 생성 프롬프트 작성(무엇이 부족한지 먼저 정하기) | product-management:product-brainstorming |
 | 일정·스프린트 | product-management:sprint-planning |
 | 노션 문서 작성/수정 | (노션 MCP 직접) + docs 필요 시 anthropic-skills:docs |
 | PDF 읽기/편집 | anthropic-skills:pdf (보기·주석은 pdf-viewer:view-pdf) |
