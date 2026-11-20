@@ -61,8 +61,9 @@ build_popular() {
     created_recent=$(gh api "repos/$repo" --jq ".created_at[0:10] >= \"$since\"" 2>/dev/null)
     tier=3-popular; [ "$created_recent" = "true" ] && tier=3-trending
     printf '%s\t%s\t%s\t%s\n' "$tier" "$repo" "$stars" "$desc" >> "$POPULAR.tmp"
-    gh api "repos/$repo/git/trees/HEAD?recursive=1" --jq '.tree[].path | select(endswith("/SKILL.md"))' 2>/dev/null \
-      | sed 's#/SKILL.md$##' | head -80 | while read -r p; do
+    gh api "repos/$repo/git/trees/HEAD?recursive=1" --jq '.tree[].path | select(. == "SKILL.md" or endswith("/SKILL.md"))' 2>/dev/null \
+      | sed 's#/*SKILL.md$##' | head -80 | while read -r p; do
+        [ -z "$p" ] && p=.   # 레포 루트에 SKILL.md 가 있는 단일 스킬 레포
         printf '%s\t%s/%s\t%s\t%s\n' "$tier" "$repo" "$p" "$stars" "$desc"
       done >> "$POPULAR.tmp"
   done < "$POPULAR.repos"
