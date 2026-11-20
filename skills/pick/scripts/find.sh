@@ -4,6 +4,7 @@
 #       bash find.sh --top [개수]     # 지금 인기·트렌드 스킬 레포 목록
 #   --all      로컬 카탈로그에서 찾아도 깃헙 실시간 검색까지
 #   --refresh  카탈로그 두 개를 강제로 새로 받음
+#   --local    네트워크 0: 캐시가 오래돼도 갱신 안 함, 실시간 검색 안 함 (/pick 이 매번 가볍게 훑을 때)
 # 순서: 제거 기록 -> 공식 카탈로그(30일 캐시) -> 인기·트렌드 카탈로그(7일 캐시) -> 깃헙 실시간(필요할 때만)
 # macOS 와 윈도우(Git Bash) 모두에서 돈다. 필요: gh(로그인), jq.
 
@@ -11,18 +12,19 @@ ARCHIVE="$HOME/.claude/skill-archive"
 CATALOG="$ARCHIVE/catalog.tsv"   # tier \t 위치 \t 설명            (공식·Anthropic)
 POPULAR="$ARCHIVE/popular.tsv"   # tier \t 위치 \t 스타 \t 설명     (인기·트렌드)
 REMOVED="$ARCHIVE/removed.md"
-ALL=0; REFRESH=0; TOP=0; KW=()
+ALL=0; REFRESH=0; TOP=0; LOCAL=0; KW=()
 for a in "$@"; do
   case "$a" in
     --all) ALL=1 ;;
     --refresh) REFRESH=1 ;;
+    --local) LOCAL=1 ;;
     --top) TOP=15 ;;
     *) if [ $TOP -gt 0 ] && [[ "$a" =~ ^[0-9]+$ ]]; then TOP=$a; else KW+=("$a"); fi ;;
   esac
 done
 [ $TOP -eq 0 ] && [ ${#KW[@]} -eq 0 ] && { echo "키워드 필요 (또는 --top)"; exit 1; }
 mkdir -p "$ARCHIVE"
-stale() { [ $REFRESH -eq 1 ] || [ ! -s "$1" ] || [ -n "$(find "$1" -mtime +"$2" 2>/dev/null)" ]; }
+stale() { [ $LOCAL -eq 0 ] || return 1; [ $REFRESH -eq 1 ] || [ ! -s "$1" ] || [ -n "$(find "$1" -mtime +"$2" 2>/dev/null)" ]; }
 # N일 전 날짜: macOS(BSD date) 와 Git Bash(GNU date) 옵션이 다르다.
 days_ago() { date -v-"$1"d +%F 2>/dev/null || date -d "$1 days ago" +%F; }
 desc_of() { awk '/^description:/{sub(/^description: */,""); if($0 ~ /^[>|][-+]?$/){getline; sub(/^ +/,"")} print; exit}' | cut -c1-180 | tr '\t\r' '  '; }
@@ -97,7 +99,8 @@ fi
 INSTALLED=$( { ls "$HOME/.claude/skills" 2>/dev/null; ls "$HOME"/.claude/skills/synced/*/ 2>/dev/null; find "$HOME/.claude/plugins/cache" -name SKILL.md 2>/dev/null | awk -F/ '{print $(NF-1)}'; } | LC_ALL=C sort -u)
 mark() { while IFS= read -r line; do
   n=$(echo "$line" | cut -f3 | sed -E 's#.*(plugin:|/)##')
-  if echo "$INSTALLED" | grep -qx "$n"; then echo "[설치됨] $line"; else echo "$line"; fi
+  # 이름만 비교하므로 다른 레포의 같은 이름 스킬도 걸린다. 확인용 표시.
+  if echo "$INSTALLED" | grep -qx "$n"; then echo "[같은 이름 설치됨] $line"; else echo "$line"; fi
 done; }
 
 # ---------- 1. 로컬 카탈로그 두 개를 함께 점수 매김 ----------
@@ -115,9 +118,11 @@ if [ -s "$ARCHIVE/.hits" ]; then
   cut -c1-230 "$ARCHIVE/.hits" | mark
   STRONG=$(awk -F'\t' '$1>=3' "$ARCHIVE/.hits" | head -1)
   if [ -n "$STRONG" ] && [ $ALL -eq 0 ]; then echo "(이름이 맞는 후보 있음: 실시간 검색 생략. 더 보려면 --all)"; exit 0; fi
+  [ $LOCAL -eq 1 ] && exit 0
   echo "(설명만 겹치는 약한 후보: 실시간 검색도 함께)"
 else
   echo "== 로컬 카탈로그 후보 없음 =="
+  [ $LOCAL -eq 1 ] && exit 0
 fi
 
 # ---------- 2. 깃헙 실시간 ----------
